@@ -1,0 +1,113 @@
+% 0) Importing MRI image
+
+close all; clear all; clc;
+i=imread('bbs-image1a.png');figure;imshow(i);
+% zoom=1.5;
+
+% 1) simple threshold-segment general foreground
+ i2=imadjust(i,[0.5 0.8],[]);
+figure;
+subplot(1,2,1);imshow(i);
+subplot(1,2,2);imshow(i2);
+i3=i2>0;
+i4=i2;
+i4(~i3)=0;
+figure;imshow(i4); hold on ;  visboundaries(i4,'Color','r');
+
+% 2) Find mean
+meani4=mean(i4(:));
+meani5=256-meani4;
+bw=i4>240;
+figure;imshow(bw);
+ 
+% 4) Region filling
+[y,x]=size(i);    
+id=fix(y/3);
+bwhalf1=bw(1:id,:);
+bwhalf2=bw(id+1:2*id,:);
+bwhalf3=bw(2*id+1:y,:);
+ 
+fill=imfill(bwhalf2,'holes');
+figure; imshow(fill);
+ 
+% 5) Morphological opening
+se=strel('sphere',12);% disk/sphere,10/12
+er=imerode(fill,se);
+di=imdilate(er,se);
+figure;imshow(di);
+ 
+ % 6) Largest blob extraction
+globe= bwareafilt(di, 1);  
+figure;imshow(globe);
+ 
+
+% 7) largest circle detection (center generation)
+[centers, radii] = imfindcircles(globe,[20 30],'ObjectPolarity','bright','Sensitivity',0.90,'EdgeThreshold',0.06);
+% Take the largest circle  
+figure;
+imshow(globe);
+h = viscircles(centers,radii);
+
+
+% 7 (a) Mask initialization (RIGHT eye globe)
+% k=(3/2)*(zoom);% 2.6 or 3.0 or 3.2
+ 
+%k=2.5;
+
+labeledImage = bwlabel(globe);
+measurements = regionprops(labeledImage, 'Centroid');
+xCenter = round(measurements.Centroid(1));
+%yCenter = (round(measurements.Centroid(2)))*k ;
+yCenter = (y/2);
+m = zeros(size(i4));
+m(xCenter:xCenter+2, yCenter:yCenter+2) = 1;
+ 
+% 7 (b) Mask initialization (LEFT eye globe)
+labeledImage = bwlabel(globe);
+measurements = regionprops(labeledImage, 'Centroid');
+xCenter = round(measurements.Centroid(1));
+%yCenter =(round(measurements.Centroid(2)))*k;
+yCenter = (y/2);
+m = zeros(size(i4));
+m(yCenter:yCenter+2, xCenter:xCenter+2) = 1;
+ 
+% 8) Active contour
+figure; imshow(i4); title('Input Image');
+figure; imshow(m); title('Initialization');
+figure; seg = activecontour(i4, m,200); title('Segmentation');%--Run segmentation
+figure; imshow(seg); title('Global Region-Based Segmentation');
+ 
+% 9) region filling
+rfill=imfill(seg,'holes');
+figure;imshow(rfill);
+
+% 10) clear small blobs attached
+se=strel('sphere',12);
+finalimage=imopen(rfill,se);
+figure;imshow(finalimage);
+
+% 11) eye globe overlay
+maskedImage = i; % Initialize
+maskedImage(~finalimage) = 0;
+% Display the masked gray scale image of only the eye globe.
+figure;
+imshow(maskedImage);
+title('Masked Eye Globe-Only Image');
+ 
+% 12) Region properties
+ stats = regionprops('table',finalimage,'Centroid','MajorAxisLength','MinorAxisLength');
+centers = stats.Centroid;
+diameters = mean([stats.MajorAxisLength stats.MinorAxisLength],2);
+r = diameters/2
+ 
+zoom=1.5;
+r_cm=r*0.0449/zoom;
+% 512pixel=23cm, with 1.5 magnification
+%r_cm=r*0.03743
+r_cm_cube=r_cm.^3
+volume_cm3 =(4/3) * pi *r_cm_cube
+ 
+% 12) saving the figure
+imwrite(finalimage,'G:\ARBAC segmentation results-BW\arbac-bw-image30b.png','png');
+ 
+imwrite(maskedImage,'G:\ARBAC segmentation results- OVERLAY\arbac-overlay-image30b.png','png');
